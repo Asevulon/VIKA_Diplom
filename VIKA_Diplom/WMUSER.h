@@ -1,0 +1,5 @@
+#pragma once
+#define WM_DELETE_CHILD WM_USER + 1
+
+#define CUSTOM_PICTURE_DLG 0
+#define CUSTOM_PICTURE_2D_DLG 1
