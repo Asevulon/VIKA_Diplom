@@ -55,9 +55,17 @@ protected:
 public:
 	void Transform(std::vector<double>& filter, vector<double>& source, uint64_t decompositionLevel, vector<DWTLevel>& out);
 	void Recover(std::vector<double>& filter, vector<DWTLevel>& in, vector<double>& out);
-
+	void DWT::dwt2d(std::vector<std::vector<double>>& image, std::vector<double>& filter, int decompositionLevel);
+	void DWT::idwt2d(std::vector<std::vector<double>>& coeffs, std::vector<double>& filter, int decompositionLevel);
 };
 
 vector<vector<double>> DispatchPicture(CString path);
 void GDIINIT();
 void GDIDEINIT();
+
+void transposeMatrix(std::vector<std::vector<double>>& matrix);
+void splitSubbands(const std::vector<std::vector<double>>& coeffs,
+	std::vector<std::vector<double>>& LL,
+	std::vector<std::vector<double>>& LH,
+	std::vector<std::vector<double>>& HL,
+	std::vector<std::vector<double>>& HH);

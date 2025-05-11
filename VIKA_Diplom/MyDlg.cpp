@@ -181,8 +181,8 @@ afx_msg LRESULT MyDlg::OnDeleteChild(WPARAM wParam, LPARAM lParam)
 void MyDlg::OnBnClickedOk()
 {
 	// TODO: добавьте свой код обработчика уведомлений
-	/*GDIINIT();
-	CString path = L"testimg.bmp";
+	GDIINIT();
+	CString path = L"лес2.png";
 	auto pic = DispatchPicture(path);
 	auto win = new CustomPicture2DDlg(path, 1000, 800, this);
 	win->customPicture.SetGraphRange(0, pic[0].size(), 0, pic.size());
@@ -191,28 +191,44 @@ void MyDlg::OnBnClickedOk()
 	GDIDEINIT();
 
 	DWT dwt;
-	vector<vector<double>>a;
-	vector<vector<double>>d;
-	vector<double>rec;
-	dwt.Transform(Filters::db4, pic.front(), 1, a, d);
-	dwt.Recover(Filters::db4, a, d, 1, rec);
+	dwt.dwt2d(pic, Filters::db4, 1);
+	auto rec = pic;
+	dwt.idwt2d(rec, Filters::db4, 1);
 
-	auto win1 = new CustomPictureDlg(L"a", 1000, 800, this);
-	win1->customPicture.SetData(a.front());
-	win1->MyShow();
+	std::vector<std::vector<double>> LL, LH, HL, HH;
+	splitSubbands(pic, LL, LH, HL, HH);
 
-	win1 = new CustomPictureDlg(L"d", 1000, 800, this);
-	win1->customPicture.SetData(d.front());
-	win1->MyShow();
+	win = new CustomPicture2DDlg(L"rec", 1000, 800, this);
+	win->customPicture.SetGraphRange(0, rec[0].size(), 0, rec.size());
+	win->customPicture.SetData(rec);
+	win->MyShow();
 
-	win1 = new CustomPictureDlg(L"source", 1000, 800, this);
-	win1->customPicture.SetData(pic.front());
-	win1->MyShow();
+	win = new CustomPicture2DDlg(L"LL", 1000, 800, this);
+	win->customPicture.SetGraphRange(0, LL[0].size(), 0, LL.size());
+	win->customPicture.SetData(LL);
+	win->customPicture.SetLogarithmic(true);
+	win->MyShow();
 
-	win1 = new CustomPictureDlg(L"rec", 1000, 800, this);
-	win1->customPicture.SetData(rec);
-	win1->MyShow();*/
-	double dt = 0.01;
+	win = new CustomPicture2DDlg(L"LH", 1000, 800, this);
+	win->customPicture.SetGraphRange(0, LH[0].size(), 0, LH.size());
+	win->customPicture.SetData(LH);
+	win->customPicture.SetLogarithmic(true);
+	win->MyShow();
+
+	win = new CustomPicture2DDlg(L"HL", 1000, 800, this);
+	win->customPicture.SetGraphRange(0, HL[0].size(), 0, HL.size());
+	win->customPicture.SetData(HL);
+	win->customPicture.SetLogarithmic(true);
+	win->MyShow();
+
+	win = new CustomPicture2DDlg(L"HH", 1000, 800, this);
+	win->customPicture.SetGraphRange(0, HH[0].size(), 0, HH.size());
+	win->customPicture.SetData(HH);
+	win->customPicture.SetLogarithmic(true);
+	win->MyShow();
+
+
+	/*double dt = 0.01;
 	size_t size = 100;
 	vector<double> source(size);
 	for (int i = 0; i < size; ++i)
@@ -240,5 +256,5 @@ void MyDlg::OnBnClickedOk()
 
 	win1 = new CustomPictureDlg(L"rec", 1000, 800, this);
 	win1->customPicture.SetData(rec);
-	win1->MyShow();
+	win1->MyShow();*/
 }

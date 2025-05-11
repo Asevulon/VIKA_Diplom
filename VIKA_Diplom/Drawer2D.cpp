@@ -127,6 +127,7 @@ void Drawer2D::ShowPicture(bool flag)
 void Drawer2D::SetLogarithmic(bool flag)
 {
 	logarithmic = flag;
+	Invalidate();
 }
 
 void Drawer2D::SetStretch(bool flag)

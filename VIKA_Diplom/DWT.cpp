@@ -213,3 +213,143 @@ void GDIDEINIT()
 {
 	Gdiplus::GdiplusShutdown(token);
 }
+
+void transposeMatrix(std::vector<std::vector<double>>& matrix) {
+	if (matrix.empty()) return;
+	size_t rows = matrix.size();
+	size_t cols = matrix[0].size();
+	std::vector<std::vector<double>> transposed(cols, std::vector<double>(rows));
+	for (size_t i = 0; i < rows; ++i) {
+		for (size_t j = 0; j < cols; ++j) {
+			transposed[j][i] = matrix[i][j];
+		}
+	}
+	matrix = transposed;
+}
+
+void splitSubbands(const std::vector<std::vector<double>>& coeffs,
+	std::vector<std::vector<double>>& LL,
+	std::vector<std::vector<double>>& LH,
+	std::vector<std::vector<double>>& HL,
+	std::vector<std::vector<double>>& HH) {
+	int halfRows = coeffs.size() / 2;
+	int halfCols = coeffs[0].size() / 2;
+	LL.resize(halfRows, std::vector<double>(halfCols));
+	LH.resize(halfRows, std::vector<double>(halfCols));
+	HL.resize(halfRows, std::vector<double>(halfCols));
+	HH.resize(halfRows, std::vector<double>(halfCols));
+
+	for (int i = 0; i < halfRows; ++i) {
+		for (int j = 0; j < halfCols; ++j) {
+			LL[i][j] = coeffs[i][j];                     // LL
+			LH[i][j] = coeffs[i + halfRows][j];          // LH
+			HL[i][j] = coeffs[i][j + halfCols];          // HL
+			HH[i][j] = coeffs[i + halfRows][j + halfCols]; // HH
+		}
+	}
+}
+
+void DWT::dwt2d(std::vector<std::vector<double>>& image, std::vector<double>& filter, int decompositionLevel) {
+	if (decompositionLevel == 0) return;
+
+	SymmetricInterpolation h0(filter);
+	SymmetricInterpolation h1 = ProduceH1(h0);
+
+	// Обработка строк
+	for (auto& row : image) {
+		std::vector<double> a, d;
+		Decompose(SymmetricInterpolation(row), a, d, h0, h1);
+		row.clear();
+		row.insert(row.end(), a.begin(), a.end());
+		row.insert(row.end(), d.begin(), d.end());
+	}
+
+	// Транспонирование для обработки столбцов
+	transposeMatrix(image);
+
+	// Обработка столбцов (теперь строки)
+	for (auto& col : image) {
+		std::vector<double> a, d;
+		Decompose(SymmetricInterpolation(col), a, d, h0, h1);
+		col.clear();
+		col.insert(col.end(), a.begin(), a.end());
+		col.insert(col.end(), d.begin(), d.end());
+	}
+
+	// Транспонирование обратно
+	transposeMatrix(image);
+
+	// Выделение LL поддиапазона для следующего уровня
+	int halfRows = image.size() / 2;
+	int halfCols = image[0].size() / 2;
+
+	std::vector<std::vector<double>> LL;
+	for (int i = 0; i < halfRows; ++i) {
+		std::vector<double> subRow(image[i].begin(), image[i].begin() + halfCols);
+		LL.push_back(subRow);
+	}
+
+	// Рекурсивно применить DWT к LL
+	if (decompositionLevel > 1) {
+		dwt2d(LL, filter, decompositionLevel - 1);
+
+		// Вставить обратно LL в соответствующее место
+		for (int i = 0; i < halfRows; ++i) {
+			for (int j = 0; j < halfCols; ++j) {
+				image[i][j] = LL[i][j];
+			}
+		}
+	}
+}
+
+void DWT::idwt2d(std::vector<std::vector<double>>& coeffs, std::vector<double>& filter, int decompositionLevel) {
+	if (decompositionLevel == 0) return;
+
+	SymmetricInterpolation h0(filter);
+	SymmetricInterpolation g0 = ProduceG(h0);
+	SymmetricInterpolation g1 = ProduceG(ProduceH1(h0));
+
+	int halfRows = coeffs.size() / 2;
+	int halfCols = coeffs[0].size() / 2;
+
+	// Если есть более глубокий уровень, сначала восстановить LL
+	if (decompositionLevel > 1) {
+		std::vector<std::vector<double>> LL;
+		for (int i = 0; i < halfRows; ++i) {
+			std::vector<double> subRow(coeffs[i].begin(), coeffs[i].begin() + halfCols);
+			LL.push_back(subRow);
+		}
+		idwt2d(LL, filter, decompositionLevel - 1);
+
+		// Вставить обратно LL
+		for (int i = 0; i < halfRows; ++i) {
+			for (int j = 0; j < halfCols; ++j) {
+				coeffs[i][j] = LL[i][j];
+			}
+		}
+	}
+
+	// Транспонирование для обработки столбцов как строк
+	transposeMatrix(coeffs);
+
+	// Обратное преобразование для столбцов
+	for (auto& col : coeffs) {
+		std::vector<double> a(col.begin(), col.begin() + halfRows);
+		std::vector<double> d(col.begin() + halfRows, col.end());
+		std::vector<double> restored;
+		Recombine(a, d, g0, g1, restored);
+		col = restored;
+	}
+
+	// Транспонирование обратно
+	transposeMatrix(coeffs);
+
+	// Обратное преобразование для строк
+	for (auto& row : coeffs) {
+		std::vector<double> a(row.begin(), row.begin() + halfCols);
+		std::vector<double> d(row.begin() + halfCols, row.end());
+		std::vector<double> restored;
+		Recombine(a, d, g0, g1, restored);
+		row = restored;
+	}
+}
