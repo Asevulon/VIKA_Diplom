@@ -35,4 +35,8 @@ protected:
 	afx_msg LRESULT OnDeleteChild(WPARAM wParam, LPARAM lParam);
 public:
 	afx_msg void OnBnClickedOk();
+
+	void ShowImage(CString label, vector<vector<double>>& pic);
 };
+
+static CWnd* g_pParent = nullptr;

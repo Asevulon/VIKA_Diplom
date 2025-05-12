@@ -12,8 +12,15 @@ namespace Filters
 		0.482962913144534, 0.836516303737469,
 	0.224143868042013, -0.129409522551260
 	};
-
-
+	static std::vector<double>db8
+	{
+		0.32580343, 1.01094572, 0.89220014, -0.03957503,
+		-0.26450717, 0.0436163, 0.0465036, -0.01498699
+	};
+	static std::vector<double>haar
+	{
+		1,1
+	};
 }
 
 class Interpolation
@@ -69,3 +76,19 @@ void splitSubbands(const std::vector<std::vector<double>>& coeffs,
 	std::vector<std::vector<double>>& LH,
 	std::vector<std::vector<double>>& HL,
 	std::vector<std::vector<double>>& HH);
+void MergeSubbands(const std::vector<std::vector<double>>& LL,
+	const std::vector<std::vector<double>>& LH,
+	const std::vector<std::vector<double>>& HL,
+	const std::vector<std::vector<double>>& HH,
+	std::vector<std::vector<double>>& out);
+
+void Noise(vector<vector<double>>& target, double NoiseLevel);
+double Ediff(vector<vector<double>>& s1, vector<vector<double>>& s2);
+void ApplyThreshold(std::vector<std::vector<double>>& coeffs, double threshold);
+double EstimateSigma(const std::vector<std::vector<double>>& coeffs);
+void DenoiseImage(std::vector<std::vector<double>>& image,
+	std::vector<double>& filter,
+	int decompositionLevel,
+	double noiseSigma);
+
+void Normalize(vector<vector<double>>& pic);

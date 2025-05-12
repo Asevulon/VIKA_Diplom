@@ -1,5 +1,7 @@
 #include "pch.h"
 #include "DWT.h"
+#include <algorithm>
+#include<limits>
 using namespace std;
 
 Interpolation::Interpolation(vector<double>& source)
@@ -190,14 +192,14 @@ vector<vector<double>> DispatchPicture(CString path)
 	g.ScaleTransform(xs, ys);
 	g.DrawImage(&img, 0, 0);
 
-	vector<vector<double>>res(ws, vector<double>(hs, 0));
-	for (int i = 0; i < ws; ++i)
+	vector<vector<double>>res(hs, vector<double>(ws, 0));
+	for (int i = 0; i < hs; ++i)
 	{
-		for (int j = 0; j < hs; ++j)
+		for (int j = 0; j < ws; ++j)
 		{
 			Gdiplus::Color c;
-			bmp.GetPixel(i, j, &c);
-			res[i][j] = ToBlack(c);
+			bmp.GetPixel(j, hs - 1 - i, &c);
+			res[i][j] = ToBlack(c) / 255.;
 		}
 	}
 	return res;
@@ -247,6 +249,56 @@ void splitSubbands(const std::vector<std::vector<double>>& coeffs,
 			HH[i][j] = coeffs[i + halfRows][j + halfCols]; // HH
 		}
 	}
+}
+
+void Noise(vector<vector<double>>& target, double NoiseLevel)
+{
+	srand(time(NULL));
+	const double NoiseNum = 12;
+	auto noise = target;
+	for (auto& row : noise)
+		for (auto& item : row)
+		{
+			item = 0;
+			for (int i = 0; i < NoiseNum; ++i)
+				item += -1. + 2. * double(rand()) / (double(RAND_MAX));
+		}
+
+	auto calcE = [](vector<vector<double>>& source) -> double {
+		double E = 0;
+		for (auto& row : source)
+			for (auto& item : row)
+				E += item * item;
+		return E;
+		};
+
+	double Es = calcE(target);
+	double En = calcE(noise);
+	double betta = sqrt(NoiseLevel * Es / En);
+
+	for (int i = 0; i < target.size(); ++i)
+	{
+		for (int j = 0; j < target[i].size(); ++j)
+		{
+			target[i][j] += noise[i][j] * betta;
+		}
+	}
+}
+
+double Ediff(vector<vector<double>>& s1, vector<vector<double>>& s2)
+{
+	double res = 0;
+	double Es = 0;
+	for (int i = 0; i < s1.size(); ++i)
+	{
+		for (int j = 0; j < s1[i].size(); ++j)
+		{
+			double temp = s1[i][j] - s2[i][j];
+			res += temp * temp;
+			Es += s1[i][j] * s1[i][j];
+		}
+	}
+	return res / Es;
 }
 
 void DWT::dwt2d(std::vector<std::vector<double>>& image, std::vector<double>& filter, int decompositionLevel) {
@@ -353,3 +405,116 @@ void DWT::idwt2d(std::vector<std::vector<double>>& coeffs, std::vector<double>& 
 		row = restored;
 	}
 }
+
+void ApplyThreshold(std::vector<std::vector<double>>& coeffs, double threshold) {
+	for (auto& row : coeffs) {
+		for (auto& val : row) {
+			// Мягкое пороговое значение (soft thresholding)
+			if (val > threshold) val -= threshold;
+			else if (val < -threshold) val += threshold;
+			else val = 0;
+		}
+	}
+}
+
+double EstimateSigma(const std::vector<std::vector<double>>& coeffs) {
+	// Извлекаем коэффициенты HH первого уровня (высокочастотные детали)
+	std::vector<double> details;
+	for (const auto& row : coeffs) {
+		for (const auto& val : row) {
+			details.push_back(val);
+		}
+	}
+
+	// Вычисляем медиану абсолютных отклонений (MAD)
+	std::sort(details.begin(), details.end());
+	double median = details[details.size() / 2];
+	std::vector<double> absDeviations;
+	for (const auto& val : details) {
+		absDeviations.push_back(fabs(val - median));
+	}
+	std::sort(absDeviations.begin(), absDeviations.end());
+	double mad = absDeviations[absDeviations.size() / 2];
+
+	// Для гауссовского шума: sigma = MAD / 0.6745
+	return mad / 0.6745;
+}
+
+void MergeSubbands(const std::vector<std::vector<double>>& LL,
+	const std::vector<std::vector<double>>& LH,
+	const std::vector<std::vector<double>>& HL,
+	const std::vector<std::vector<double>>& HH,
+	std::vector<std::vector<double>>& out) {
+	int rows = LL.size() * 2;
+	int cols = LL[0].size() * 2;
+	out.resize(rows, std::vector<double>(cols));
+
+	for (int i = 0; i < LL.size(); ++i) {
+		for (int j = 0; j < LL[0].size(); ++j) {
+			out[i][j] = LL[i][j];          // LL
+			out[i][j + LL[0].size()] = LH[i][j]; // LH
+			out[i + LL.size()][j] = HL[i][j]; // HL
+			out[i + LL.size()][j + LL[0].size()] = HH[i][j]; // HH
+		}
+	}
+}
+
+void DenoiseImage(std::vector<std::vector<double>>& image,
+	std::vector<double>& filter,
+	int decompositionLevel,
+	double noiseSigma) {
+	// Шаг 1: Прямое DWT
+	DWT dwt;
+	dwt.dwt2d(image, filter, decompositionLevel);
+
+	// Шаг 2: Вычисление порога (по Доногоу)
+	double threshold = noiseSigma * sqrt(2.0 * log(double(image.size() * image[0].size())));
+
+	// Шаг 3: Пороговая обработка высокочастотных поддиапазонов
+	for (int level = 0; level < decompositionLevel; ++level) {
+		// Выделите поддиапазоны LH, HL, HH на текущем уровне
+		std::vector<std::vector<double>> LL, LH, HL, HH;
+		splitSubbands(image, LL, LH, HL, HH);
+
+		// Примените порог к LH, HL, HH
+		ApplyThreshold(LH, threshold);
+		ApplyThreshold(HL, threshold);
+		ApplyThreshold(HH, threshold);
+
+		// Объедините поддиапазоны обратно
+		MergeSubbands(LL, LH, HL, HH, image);
+	}
+
+	// Шаг 4: Обратное DWT
+	dwt.idwt2d(image, filter, decompositionLevel);
+}
+
+void Normalize(vector<vector<double>>& pic)
+{
+	double min = 0;
+	double max = 0;
+	for(auto&row:pic)
+		for (auto& item : row)
+		{
+			if (item < min)min = item;
+			if (item > max)max = item;
+		}
+	double range = max - min;
+
+	for (auto& row : pic)
+		for (auto& item : row)
+		{
+			item = (item - min) / range;
+		}
+}
+
+#include"CustomPicture2DDlg.h"
+void ShowImage(CString label, vector<vector<double>>& pic, CWnd* parent = nullptr)
+{
+	auto win = new CustomPicture2DDlg(label, 1000, 800, parent);
+	win->customPicture.SetGraphRange(0, pic[0].size(), 0, pic.size());
+	win->customPicture.SetData(pic);
+	win->MyShow();
+}
+
+	

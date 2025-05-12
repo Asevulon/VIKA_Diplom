@@ -181,27 +181,31 @@ afx_msg LRESULT MyDlg::OnDeleteChild(WPARAM wParam, LPARAM lParam)
 void MyDlg::OnBnClickedOk()
 {
 	// TODO: добавьте свой код обработчика уведомлений
+	g_pParent = this;
+
+	auto& filter = Filters::db8;
+	int decLevel = 1;
 	GDIINIT();
-	CString path = L"лес2.png";
+	CString path = L"лес.png";
 	auto pic = DispatchPicture(path);
-	auto win = new CustomPicture2DDlg(path, 1000, 800, this);
-	win->customPicture.SetGraphRange(0, pic[0].size(), 0, pic.size());
-	win->customPicture.SetData(pic);
-	win->MyShow();
+	ShowImage(path, pic);
 	GDIDEINIT();
 
-	DWT dwt;
-	dwt.dwt2d(pic, Filters::db4, 1);
-	auto rec = pic;
-	dwt.idwt2d(rec, Filters::db4, 1);
+	auto noisedPic = pic;
+	Noise(noisedPic, 0.2);
+	double ediff = Ediff(pic, noisedPic);
+	path.Format(L"noisedPic, Ediff(pic, noisedPic) = %.3f", ediff);
 
-	std::vector<std::vector<double>> LL, LH, HL, HH;
-	splitSubbands(pic, LL, LH, HL, HH);
-
-	win = new CustomPicture2DDlg(L"rec", 1000, 800, this);
-	win->customPicture.SetGraphRange(0, rec[0].size(), 0, rec.size());
-	win->customPicture.SetData(rec);
+	auto win = new CustomPicture2DDlg(path, 1000, 800, this);
+	win->customPicture.SetGraphRange(0, noisedPic[0].size(), 0, noisedPic.size());
+	win->customPicture.SetData(noisedPic);
 	win->MyShow();
+
+	auto noiseddwt = noisedPic;
+	DWT dwt;
+	dwt.dwt2d(noiseddwt, filter, decLevel);
+	std::vector<std::vector<double>> LL, LH, HL, HH;
+	splitSubbands(noiseddwt, LL, LH, HL, HH);
 
 	win = new CustomPicture2DDlg(L"LL", 1000, 800, this);
 	win->customPicture.SetGraphRange(0, LL[0].size(), 0, LL.size());
@@ -227,34 +231,25 @@ void MyDlg::OnBnClickedOk()
 	win->customPicture.SetLogarithmic(true);
 	win->MyShow();
 
+	double sigma = EstimateSigma(HH);
+	int N = noisedPic.size() * noisedPic[0].size();
+	double threshold = sigma * sqrt(2.0 * log(N));
 
-	/*double dt = 0.01;
-	size_t size = 100;
-	vector<double> source(size);
-	for (int i = 0; i < size; ++i)
-	{
-		source[i] = sin(6.28 * 1 * i * dt);
-	}
+	auto rec = noisedPic;
+	DenoiseImage(rec, filter, decLevel, sigma);
+	ediff = Ediff(pic, rec);
+	path.Format(L"rec, Ediff(pic, rec) = %.3f", ediff);
 
-	DWT dwt;
-	vector<DWTLevel> ad;
-	vector<double>rec;
-	dwt.Transform(Filters::db4, source, 1, ad);
-	dwt.Recover(Filters::db4, ad, rec);
+	win = new CustomPicture2DDlg(path, 1000, 800, this);
+	win->customPicture.SetGraphRange(0, rec[0].size(), 0, rec.size());
+	win->customPicture.SetData(rec);
+	win->MyShow();
+}
 
-	auto win1 = new CustomPictureDlg(L"a", 1000, 800, this);
-	win1->customPicture.SetData(ad[0].a);
-	win1->MyShow();
-
-	win1 = new CustomPictureDlg(L"d", 1000, 800, this);
-	win1->customPicture.SetData(ad[0].d);
-	win1->MyShow();
-
-	win1 = new CustomPictureDlg(L"source", 1000, 800, this);
-	win1->customPicture.SetData(source);
-	win1->MyShow();
-
-	win1 = new CustomPictureDlg(L"rec", 1000, 800, this);
-	win1->customPicture.SetData(rec);
-	win1->MyShow();*/
+void MyDlg::ShowImage(CString label, vector<vector<double>>& pic)
+{
+	auto win = new CustomPicture2DDlg(label, 1000, 800, this);
+	win->customPicture.SetGraphRange(0, pic[0].size(), 0, pic.size());
+	win->customPicture.SetData(pic);
+	win->MyShow();
 }
