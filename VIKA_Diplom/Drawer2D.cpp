@@ -445,7 +445,26 @@ void Drawer2D::OnGraph(LPDRAWITEMSTRUCT lpDrawItemStruct)
 		}
 	}
 
-
+	Pen matchPen(Color::Orange);
+	SolidBrush matchBrush(Color::Orange);
+	for (auto& match : matches)
+	{
+		RECT rect = match.first;
+		float l = rect.left;
+		float t = rect.top;
+		float h = rect.bottom - t;
+		float w = rect.right - l;
+		Rect grect(l, t, w, h);
+		gr.SetTransform(&matr);
+		double score = match.second;
+		gr.DrawRectangle(&matchPen, grect);
+		gr.ResetTransform();
+		/*CString str;
+		str.Format(L"score: %f.2", score);
+		PointF strp(l, rect.top);
+		matr.TransformPoints(&strp);
+		gr.DrawString(str, str.GetLength() + 1, &font, strp, &matchBrush);*/
+	}
 	
 	ToWindow.DrawImage(&bmp, 0, 0);
 }

@@ -183,72 +183,96 @@ void MyDlg::OnBnClickedOk()
 	// TODO: добавьте свой код обработчика уведомлений
 	g_pParent = this;
 
-	auto& filter = Filters::db8;
-	int decLevel = 1;
+	auto& filter = Filters::haar;
+	int decLevel =1;
 	GDIINIT();
-	CString path = L"лес.png";
+	CString path = L"смешарики1.jpg";
 	auto pic = DispatchPicture(path);
-	ShowImage(path, pic);
+	ShowImage(L"Исходное", pic);
 	GDIDEINIT();
 
+	auto pattern = DispatchPicture(L"совунья.jpg");
+	ShowImage(L"pattern", pattern);
+
 	auto noisedPic = pic;
-	Noise(noisedPic, 0.2);
+	Noise(noisedPic,0.25);
 	double ediff = Ediff(pic, noisedPic);
 	path.Format(L"noisedPic, Ediff(pic, noisedPic) = %.3f", ediff);
+	ShowImage(path, noisedPic);
 
-	auto win = new CustomPicture2DDlg(path, 1000, 800, this);
-	win->customPicture.SetGraphRange(0, noisedPic[0].size(), 0, noisedPic.size());
-	win->customPicture.SetData(noisedPic);
-	win->MyShow();
-
-	auto noiseddwt = noisedPic;
 	DWT dwt;
-	dwt.dwt2d(noiseddwt, filter, decLevel);
-	std::vector<std::vector<double>> LL, LH, HL, HH;
-	splitSubbands(noiseddwt, LL, LH, HL, HH);
+	//auto matches = FindObject(pic, pattern, dwt, filter, 1, 0.75);
+	auto matches = FindObjectAdaptive(noisedPic, pattern, dwt, filter, 1, 0.445, 2, 1);
+	path.Format(L"Found patterns: %d", matches.size());
+	ShowImage(path, noisedPic, matches);
+	//auto noisedPic = pic;
+	//Noise(noisedPic, 0.2);
+	//double ediff = Ediff(pic, noisedPic);
+	//path.Format(L"noisedPic, Ediff(pic, noisedPic) = %.3f", ediff);
 
-	win = new CustomPicture2DDlg(L"LL", 1000, 800, this);
-	win->customPicture.SetGraphRange(0, LL[0].size(), 0, LL.size());
-	win->customPicture.SetData(LL);
-	win->customPicture.SetLogarithmic(true);
-	win->MyShow();
+	//auto win = new CustomPicture2DDlg(path, 1000, 800, this);
+	//win->customPicture.SetGraphRange(0, noisedPic[0].size(), 0, noisedPic.size());
+	//win->customPicture.SetData(noisedPic);
+	//win->MyShow();
 
-	win = new CustomPicture2DDlg(L"LH", 1000, 800, this);
-	win->customPicture.SetGraphRange(0, LH[0].size(), 0, LH.size());
-	win->customPicture.SetData(LH);
-	win->customPicture.SetLogarithmic(true);
-	win->MyShow();
+	//auto noiseddwt = noisedPic;
+	//DWT dwt;
+	//dwt.dwt2d(noiseddwt, filter, decLevel);
+	//std::vector<std::vector<double>> LL, LH, HL, HH;
+	//splitSubbands(noiseddwt, LL, LH, HL, HH);
 
-	win = new CustomPicture2DDlg(L"HL", 1000, 800, this);
-	win->customPicture.SetGraphRange(0, HL[0].size(), 0, HL.size());
-	win->customPicture.SetData(HL);
-	win->customPicture.SetLogarithmic(true);
-	win->MyShow();
+	//win = new CustomPicture2DDlg(L"LL", 1000, 800, this);
+	//win->customPicture.SetGraphRange(0, LL[0].size(), 0, LL.size());
+	//win->customPicture.SetData(LL);
+	//win->customPicture.SetLogarithmic(true);
+	//win->MyShow();
 
-	win = new CustomPicture2DDlg(L"HH", 1000, 800, this);
-	win->customPicture.SetGraphRange(0, HH[0].size(), 0, HH.size());
-	win->customPicture.SetData(HH);
-	win->customPicture.SetLogarithmic(true);
-	win->MyShow();
+	//win = new CustomPicture2DDlg(L"LH", 1000, 800, this);
+	//win->customPicture.SetGraphRange(0, LH[0].size(), 0, LH.size());
+	//win->customPicture.SetData(LH);
+	//win->customPicture.SetLogarithmic(true);
+	//win->MyShow();
 
-	double sigma = EstimateSigma(HH);
-	int N = noisedPic.size() * noisedPic[0].size();
-	double threshold = sigma * sqrt(2.0 * log(N));
+	//win = new CustomPicture2DDlg(L"HL", 1000, 800, this);
+	//win->customPicture.SetGraphRange(0, HL[0].size(), 0, HL.size());
+	//win->customPicture.SetData(HL);
+	//win->customPicture.SetLogarithmic(true);
+	//win->MyShow();
 
-	auto rec = noisedPic;
-	DenoiseImage(rec, filter, decLevel, sigma);
-	ediff = Ediff(pic, rec);
-	path.Format(L"rec, Ediff(pic, rec) = %.3f", ediff);
+	//win = new CustomPicture2DDlg(L"HH", 1000, 800, this);
+	//win->customPicture.SetGraphRange(0, HH[0].size(), 0, HH.size());
+	//win->customPicture.SetData(HH);
+	//win->customPicture.SetLogarithmic(true);
+	//win->MyShow();
 
-	win = new CustomPicture2DDlg(path, 1000, 800, this);
-	win->customPicture.SetGraphRange(0, rec[0].size(), 0, rec.size());
-	win->customPicture.SetData(rec);
-	win->MyShow();
+	//double sigma = EstimateSigma(HH);
+	//int N = noisedPic.size() * noisedPic[0].size();
+	//double threshold = sigma * sqrt(2.0 * log(N));
+
+	//auto rec = noisedPic;
+	//DenoiseImage(rec, filter, decLevel, sigma);
+	////DenoiseImageByAvg(rec, filter, decLevel);
+	//ediff = Ediff(pic, rec);
+	//path.Format(L"rec, Ediff(pic, rec) = %.3f, sigma = %.3f", ediff, sigma);
+
+	//win = new CustomPicture2DDlg(path, 1000, 800, this);
+	//win->customPicture.SetGraphRange(0, rec[0].size(), 0, rec.size());
+	//win->customPicture.SetData(rec);
+	//win->MyShow();
 }
 
 void MyDlg::ShowImage(CString label, vector<vector<double>>& pic)
 {
 	auto win = new CustomPicture2DDlg(label, 1000, 800, this);
+	win->customPicture.SetGraphRange(0, pic[0].size(), 0, pic.size());
+	win->customPicture.SetData(pic);
+	win->MyShow();
+}
+
+void MyDlg::ShowImage(CString label, vector<vector<double>>& pic, vector<pair<RECT, double>>&matches)
+{
+	auto win = new CustomPicture2DDlg(label, 1000, 800, this);
+	win->customPicture.matches = matches;
 	win->customPicture.SetGraphRange(0, pic[0].size(), 0, pic.size());
 	win->customPicture.SetData(pic);
 	win->MyShow();

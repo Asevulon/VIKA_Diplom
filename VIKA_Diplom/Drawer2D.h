@@ -88,6 +88,8 @@ public:
 	void SetLogarithmic(bool flag);
 	void SetStretch(bool flag = true);
 	void SetGraphRange(double pleft, double pright, double pbot, double ptop);
+
+	vector<pair<RECT, double>> matches;
 };
 
 

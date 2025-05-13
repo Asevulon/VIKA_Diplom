@@ -1,6 +1,7 @@
-#include "pch.h"
+п»ї#include "pch.h"
 #include "DWT.h"
 #include <algorithm>
+#include <stdexcept>
 #include<limits>
 using namespace std;
 
@@ -24,12 +25,12 @@ int SymmetricInterpolation::get_index(int index) const {
 	if (index >= 0 && index < N)
 		return index;
 
-	// Зеркальное отражение относительно границ
-	index = std::abs(index); // Отрицательные индексы становятся положительными
-	index %= (2 * N - 2);    // Циклическое зеркалирование
+	// Р—РµСЂРєР°Р»СЊРЅРѕРµ РѕС‚СЂР°Р¶РµРЅРёРµ РѕС‚РЅРѕСЃРёС‚РµР»СЊРЅРѕ РіСЂР°РЅРёС†
+	index = std::abs(index); // РћС‚СЂРёС†Р°С‚РµР»СЊРЅС‹Рµ РёРЅРґРµРєСЃС‹ СЃС‚Р°РЅРѕРІСЏС‚СЃСЏ РїРѕР»РѕР¶РёС‚РµР»СЊРЅС‹РјРё
+	index %= (2 * N - 2);    // Р¦РёРєР»РёС‡РµСЃРєРѕРµ Р·РµСЂРєР°Р»РёСЂРѕРІР°РЅРёРµ
 
 	if (index >= N) {
-		index = 2 * N - index - 2; // Корректное зеркалирование
+		index = 2 * N - index - 2; // РљРѕСЂСЂРµРєС‚РЅРѕРµ Р·РµСЂРєР°Р»РёСЂРѕРІР°РЅРёРµ
 	}
 
 	return index;
@@ -107,7 +108,7 @@ void DWT::Convolution(SymmetricInterpolation& f, SymmetricInterpolation& g, vect
 {
 	size_t fSize = f.Size();
 	size_t gSize = g.Size();
-	size_t outSize = fSize; // Теперь хотим, чтобы результат был такой же длины
+	size_t outSize = fSize; // РўРµРїРµСЂСЊ С…РѕС‚РёРј, С‡С‚РѕР±С‹ СЂРµР·СѓР»СЊС‚Р°С‚ Р±С‹Р» С‚Р°РєРѕР№ Р¶Рµ РґР»РёРЅС‹
 	out.resize(outSize);
 
 	int halfFilter = gSize / 2;
@@ -161,7 +162,7 @@ void DWT::Recover(std::vector<double>& filter, vector<DWTLevel>& in, vector<doub
 }
 
 uint32_t UpScale(uint32_t n) {
-	if (n == 0) return 1; // специальный случай
+	if (n == 0) return 1; // СЃРїРµС†РёР°Р»СЊРЅС‹Р№ СЃР»СѓС‡Р°Р№
 	if (n == 1) return 1;
 
 	uint32_t result = 1;
@@ -183,8 +184,8 @@ vector<vector<double>> DispatchPicture(CString path)
 	Gdiplus::Image img(path);
 	int w = img.GetWidth();
 	int h = img.GetHeight();
-	int ws = UpScale(w);
-	int hs = UpScale(h);
+	int ws = (w % 2)? w + 1: w;// UpScale(w);
+	int hs = (h % 2)? h + 1: h;// UpScale(h);
 	float xs = float(ws) / float(w);
 	float ys = float(hs) / float(h);
 	Gdiplus::Bitmap bmp(ws, hs);
@@ -256,13 +257,30 @@ void Noise(vector<vector<double>>& target, double NoiseLevel)
 	srand(time(NULL));
 	const double NoiseNum = 12;
 	auto noise = target;
+
+	auto  three_point_derivative = [](const std::vector<double>& data, double h) {
+		std::vector<double> derivative;
+		size_t n = data.size();
+		derivative.resize(n);
+		derivative[0] = (-3.0 * data[0] + 4.0 * data[1] - data[2]) / (2.0 * h);
+		derivative[n - 1] = (3.0 * data[n - 1] - 4.0 * data[n - 2] + data[n - 3]) / (2.0 * h);
+		for (size_t i = 1; i < n - 1; ++i) {
+			derivative[i] = (data[i + 1] - data[i - 1]) / (2.0 * h);
+		}
+		return derivative;
+		};
+
 	for (auto& row : noise)
+	{
+
 		for (auto& item : row)
 		{
 			item = 0;
 			for (int i = 0; i < NoiseNum; ++i)
 				item += -1. + 2. * double(rand()) / (double(RAND_MAX));
 		}
+		//row = three_point_derivative(row, 1);
+	}
 
 	auto calcE = [](vector<vector<double>>& source) -> double {
 		double E = 0;
@@ -301,13 +319,28 @@ double Ediff(vector<vector<double>>& s1, vector<vector<double>>& s2)
 	return res / Es;
 }
 
+double POSSH(vector<vector<double>>& s1, vector<vector<double>>& s2)
+{
+	double summ = 0;
+	for (int i = 0; i < s1.size(); ++i)
+	{
+		for (int j = 0; j < s1[i].size(); ++j)
+		{
+			double temp = s1[i][j] - s2[i][j];
+			summ += temp * temp;
+		}
+	}
+	summ /= s1.size() * s1.front().size();
+	return 20. * log10 (255. / sqrt(summ));
+}
+
 void DWT::dwt2d(std::vector<std::vector<double>>& image, std::vector<double>& filter, int decompositionLevel) {
 	if (decompositionLevel == 0) return;
 
 	SymmetricInterpolation h0(filter);
 	SymmetricInterpolation h1 = ProduceH1(h0);
 
-	// Обработка строк
+	// РћР±СЂР°Р±РѕС‚РєР° СЃС‚СЂРѕРє
 	for (auto& row : image) {
 		std::vector<double> a, d;
 		Decompose(SymmetricInterpolation(row), a, d, h0, h1);
@@ -316,10 +349,10 @@ void DWT::dwt2d(std::vector<std::vector<double>>& image, std::vector<double>& fi
 		row.insert(row.end(), d.begin(), d.end());
 	}
 
-	// Транспонирование для обработки столбцов
+	// РўСЂР°РЅСЃРїРѕРЅРёСЂРѕРІР°РЅРёРµ РґР»СЏ РѕР±СЂР°Р±РѕС‚РєРё СЃС‚РѕР»Р±С†РѕРІ
 	transposeMatrix(image);
 
-	// Обработка столбцов (теперь строки)
+	// РћР±СЂР°Р±РѕС‚РєР° СЃС‚РѕР»Р±С†РѕРІ (С‚РµРїРµСЂСЊ СЃС‚СЂРѕРєРё)
 	for (auto& col : image) {
 		std::vector<double> a, d;
 		Decompose(SymmetricInterpolation(col), a, d, h0, h1);
@@ -328,10 +361,10 @@ void DWT::dwt2d(std::vector<std::vector<double>>& image, std::vector<double>& fi
 		col.insert(col.end(), d.begin(), d.end());
 	}
 
-	// Транспонирование обратно
+	// РўСЂР°РЅСЃРїРѕРЅРёСЂРѕРІР°РЅРёРµ РѕР±СЂР°С‚РЅРѕ
 	transposeMatrix(image);
 
-	// Выделение LL поддиапазона для следующего уровня
+	// Р’С‹РґРµР»РµРЅРёРµ LL РїРѕРґРґРёР°РїР°Р·РѕРЅР° РґР»СЏ СЃР»РµРґСѓСЋС‰РµРіРѕ СѓСЂРѕРІРЅСЏ
 	int halfRows = image.size() / 2;
 	int halfCols = image[0].size() / 2;
 
@@ -341,11 +374,11 @@ void DWT::dwt2d(std::vector<std::vector<double>>& image, std::vector<double>& fi
 		LL.push_back(subRow);
 	}
 
-	// Рекурсивно применить DWT к LL
+	// Р РµРєСѓСЂСЃРёРІРЅРѕ РїСЂРёРјРµРЅРёС‚СЊ DWT Рє LL
 	if (decompositionLevel > 1) {
 		dwt2d(LL, filter, decompositionLevel - 1);
 
-		// Вставить обратно LL в соответствующее место
+		// Р’СЃС‚Р°РІРёС‚СЊ РѕР±СЂР°С‚РЅРѕ LL РІ СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓСЋС‰РµРµ РјРµСЃС‚Рѕ
 		for (int i = 0; i < halfRows; ++i) {
 			for (int j = 0; j < halfCols; ++j) {
 				image[i][j] = LL[i][j];
@@ -364,7 +397,7 @@ void DWT::idwt2d(std::vector<std::vector<double>>& coeffs, std::vector<double>& 
 	int halfRows = coeffs.size() / 2;
 	int halfCols = coeffs[0].size() / 2;
 
-	// Если есть более глубокий уровень, сначала восстановить LL
+	// Р•СЃР»Рё РµСЃС‚СЊ Р±РѕР»РµРµ РіР»СѓР±РѕРєРёР№ СѓСЂРѕРІРµРЅСЊ, СЃРЅР°С‡Р°Р»Р° РІРѕСЃСЃС‚Р°РЅРѕРІРёС‚СЊ LL
 	if (decompositionLevel > 1) {
 		std::vector<std::vector<double>> LL;
 		for (int i = 0; i < halfRows; ++i) {
@@ -373,7 +406,7 @@ void DWT::idwt2d(std::vector<std::vector<double>>& coeffs, std::vector<double>& 
 		}
 		idwt2d(LL, filter, decompositionLevel - 1);
 
-		// Вставить обратно LL
+		// Р’СЃС‚Р°РІРёС‚СЊ РѕР±СЂР°С‚РЅРѕ LL
 		for (int i = 0; i < halfRows; ++i) {
 			for (int j = 0; j < halfCols; ++j) {
 				coeffs[i][j] = LL[i][j];
@@ -381,10 +414,10 @@ void DWT::idwt2d(std::vector<std::vector<double>>& coeffs, std::vector<double>& 
 		}
 	}
 
-	// Транспонирование для обработки столбцов как строк
+	// РўСЂР°РЅСЃРїРѕРЅРёСЂРѕРІР°РЅРёРµ РґР»СЏ РѕР±СЂР°Р±РѕС‚РєРё СЃС‚РѕР»Р±С†РѕРІ РєР°Рє СЃС‚СЂРѕРє
 	transposeMatrix(coeffs);
 
-	// Обратное преобразование для столбцов
+	// РћР±СЂР°С‚РЅРѕРµ РїСЂРµРѕР±СЂР°Р·РѕРІР°РЅРёРµ РґР»СЏ СЃС‚РѕР»Р±С†РѕРІ
 	for (auto& col : coeffs) {
 		std::vector<double> a(col.begin(), col.begin() + halfRows);
 		std::vector<double> d(col.begin() + halfRows, col.end());
@@ -393,10 +426,10 @@ void DWT::idwt2d(std::vector<std::vector<double>>& coeffs, std::vector<double>& 
 		col = restored;
 	}
 
-	// Транспонирование обратно
+	// РўСЂР°РЅСЃРїРѕРЅРёСЂРѕРІР°РЅРёРµ РѕР±СЂР°С‚РЅРѕ
 	transposeMatrix(coeffs);
 
-	// Обратное преобразование для строк
+	// РћР±СЂР°С‚РЅРѕРµ РїСЂРµРѕР±СЂР°Р·РѕРІР°РЅРёРµ РґР»СЏ СЃС‚СЂРѕРє
 	for (auto& row : coeffs) {
 		std::vector<double> a(row.begin(), row.begin() + halfCols);
 		std::vector<double> d(row.begin() + halfCols, row.end());
@@ -409,7 +442,7 @@ void DWT::idwt2d(std::vector<std::vector<double>>& coeffs, std::vector<double>& 
 void ApplyThreshold(std::vector<std::vector<double>>& coeffs, double threshold) {
 	for (auto& row : coeffs) {
 		for (auto& val : row) {
-			// Мягкое пороговое значение (soft thresholding)
+			// РњСЏРіРєРѕРµ РїРѕСЂРѕРіРѕРІРѕРµ Р·РЅР°С‡РµРЅРёРµ (soft thresholding)
 			if (val > threshold) val -= threshold;
 			else if (val < -threshold) val += threshold;
 			else val = 0;
@@ -418,7 +451,7 @@ void ApplyThreshold(std::vector<std::vector<double>>& coeffs, double threshold) 
 }
 
 double EstimateSigma(const std::vector<std::vector<double>>& coeffs) {
-	// Извлекаем коэффициенты HH первого уровня (высокочастотные детали)
+	// РР·РІР»РµРєР°РµРј РєРѕСЌС„С„РёС†РёРµРЅС‚С‹ HH РїРµСЂРІРѕРіРѕ СѓСЂРѕРІРЅСЏ (РІС‹СЃРѕРєРѕС‡Р°СЃС‚РѕС‚РЅС‹Рµ РґРµС‚Р°Р»Рё)
 	std::vector<double> details;
 	for (const auto& row : coeffs) {
 		for (const auto& val : row) {
@@ -426,7 +459,7 @@ double EstimateSigma(const std::vector<std::vector<double>>& coeffs) {
 		}
 	}
 
-	// Вычисляем медиану абсолютных отклонений (MAD)
+	// Р’С‹С‡РёСЃР»СЏРµРј РјРµРґРёР°РЅСѓ Р°Р±СЃРѕР»СЋС‚РЅС‹С… РѕС‚РєР»РѕРЅРµРЅРёР№ (MAD)
 	std::sort(details.begin(), details.end());
 	double median = details[details.size() / 2];
 	std::vector<double> absDeviations;
@@ -436,7 +469,7 @@ double EstimateSigma(const std::vector<std::vector<double>>& coeffs) {
 	std::sort(absDeviations.begin(), absDeviations.end());
 	double mad = absDeviations[absDeviations.size() / 2];
 
-	// Для гауссовского шума: sigma = MAD / 0.6745
+	// Р”Р»СЏ РіР°СѓСЃСЃРѕРІСЃРєРѕРіРѕ С€СѓРјР°: sigma = MAD / 0.6745
 	return mad / 0.6745;
 }
 
@@ -463,53 +496,167 @@ void DenoiseImage(std::vector<std::vector<double>>& image,
 	std::vector<double>& filter,
 	int decompositionLevel,
 	double noiseSigma) {
-	// Шаг 1: Прямое DWT
+	// РЁР°Рі 1: РџСЂСЏРјРѕРµ DWT
+
+	
 	DWT dwt;
 	dwt.dwt2d(image, filter, decompositionLevel);
 
-	// Шаг 2: Вычисление порога (по Доногоу)
+	// РЁР°Рі 2: Р’С‹С‡РёСЃР»РµРЅРёРµ РїРѕСЂРѕРіР° (РїРѕ Р”РѕРЅРѕРіРѕСѓ)
 	double threshold = noiseSigma * sqrt(2.0 * log(double(image.size() * image[0].size())));
 
-	// Шаг 3: Пороговая обработка высокочастотных поддиапазонов
+	// РЁР°Рі 3: РџРѕСЂРѕРіРѕРІР°СЏ РѕР±СЂР°Р±РѕС‚РєР° РІС‹СЃРѕРєРѕС‡Р°СЃС‚РѕС‚РЅС‹С… РїРѕРґРґРёР°РїР°Р·РѕРЅРѕРІ
 	for (int level = 0; level < decompositionLevel; ++level) {
-		// Выделите поддиапазоны LH, HL, HH на текущем уровне
+		// Р’С‹РґРµР»РёС‚Рµ РїРѕРґРґРёР°РїР°Р·РѕРЅС‹ LH, HL, HH РЅР° С‚РµРєСѓС‰РµРј СѓСЂРѕРІРЅРµ
 		std::vector<std::vector<double>> LL, LH, HL, HH;
 		splitSubbands(image, LL, LH, HL, HH);
 
-		// Примените порог к LH, HL, HH
+		// РџСЂРёРјРµРЅРёС‚Рµ РїРѕСЂРѕРі Рє LH, HL, HH
 		ApplyThreshold(LH, threshold);
 		ApplyThreshold(HL, threshold);
 		ApplyThreshold(HH, threshold);
 
-		// Объедините поддиапазоны обратно
+		ShowImage(L"LH Clear", LH, g_pParent);
+		ShowImage(L"HL Clear", HL, g_pParent);
+		ShowImage(L"HH Clear", HH, g_pParent);
+
+		// РћР±СЉРµРґРёРЅРёС‚Рµ РїРѕРґРґРёР°РїР°Р·РѕРЅС‹ РѕР±СЂР°С‚РЅРѕ
 		MergeSubbands(LL, LH, HL, HH, image);
 	}
 
-	// Шаг 4: Обратное DWT
+	// РЁР°Рі 4: РћР±СЂР°С‚РЅРѕРµ DWT
 	dwt.idwt2d(image, filter, decompositionLevel);
 }
 
-void Normalize(vector<vector<double>>& pic)
+//void Normalize(vector<vector<double>>& pic)
+//{
+//	double min = 0;
+//	double max = 0;
+//	for (auto& row : pic)
+//		for (auto& item : row)
+//		{
+//			if (item < min)min = item;
+//			if (item > max)max = item;
+//		}
+//	double range = max - min;
+//
+//	for (auto& row : pic)
+//		for (auto& item : row)
+//		{
+//			item = (item - min) / range;
+//		}
+//}
+
+void Centralize(vector<vector<double>>& image)
 {
 	double min = 0;
-	double max = 0;
-	for(auto&row:pic)
+	for (auto& row : image)
 		for (auto& item : row)
-		{
 			if (item < min)min = item;
-			if (item > max)max = item;
-		}
-	double range = max - min;
-
-	for (auto& row : pic)
+	for (auto& row : image)
 		for (auto& item : row)
+			item -= min;
+}
+
+void DenoiseImageByAvg(std::vector<std::vector<double>>& image, std::vector<double>& filter, int decompositionLevel)
+{
+	DWT dwt;
+	dwt.dwt2d(image, filter, decompositionLevel);
+
+	auto AvgThreshold = [](vector<vector<double>>& pic, double mul) {
+		double max = 0;
+		double avg = 0;
+		for (auto& row : pic)
+			for (auto& item : row)
+			{
+				avg += item;
+				if (item > max)max = item;
+			}
+		avg /= pic.size() * pic[0].size();
+
+		double threshold = (avg);
+		for (auto& row : pic)
+			for (auto& item : row)
+			{
+				if (item < threshold)item *= mul;
+			}
+		};
+
+	auto SmartThreshold = [](vector<vector<double>>& pic, double mul) {
+		auto get = [](vector<vector<double>>& from, int i, int j, double min)
+			{
+				if (i < 0)return min;
+				if (j < 0)return min;
+				if (i >= from.size())return min;
+				if (j >= from.front().size())return min;
+				return from[i][j];
+			};
+		auto Check = [&get](vector<vector<double>>& target, int i, int j, double min, double threshold)
+			{
+				if (get(target, i, j, min) < threshold)return false;
+				if (get(target, i + 1, j, min) > threshold)return true;
+				if (get(target, i + 1, j + 1, min) > threshold)return true;
+				if (get(target, i + 1, j - 1, min) > threshold)return true;
+				if (get(target, i, j + 1, min) > threshold)return true;
+				if (get(target, i, j - 1, min) > threshold)return true;
+				if (get(target, i - 1, j - 1, min) > threshold)return true;
+				if (get(target, i - 1, j, min) > threshold)return true;
+				if (get(target, i - 1, j + 1, min) > threshold)return true;
+				return false;
+			};
+
+		double max = 0;
+		double min = 0;
+		double avg = 0;
+		for (auto& row : pic)
+			for (auto& item : row)
+			{
+				avg += item;
+				if (item > max)max = item;
+				if (item < min)min = item;
+			}
+		avg /= pic.size() * pic[0].size();
+
+		double threshold = (avg);
+		for (int i = 0; i < pic.size(); ++i)
 		{
-			item = (item - min) / range;
+			for (int j = 0; j < pic[i].size(); ++j)
+			{
+				if (!Check(pic, i, j, min, threshold))pic[i][j] *= mul;
+			}
 		}
+
+		};
+
+	double mul = 0.1;
+	for (int level = 0; level < decompositionLevel; ++level) {
+		// Р’С‹РґРµР»РёС‚Рµ РїРѕРґРґРёР°РїР°Р·РѕРЅС‹ LH, HL, HH РЅР° С‚РµРєСѓС‰РµРј СѓСЂРѕРІРЅРµ
+		std::vector<std::vector<double>> LL, LH, HL, HH;
+		splitSubbands(image, LL, LH, HL, HH);
+
+		// РџСЂРёРјРµРЅРёС‚Рµ РїРѕСЂРѕРі Рє LH, HL, HH
+		AvgThreshold(LH, mul);
+		AvgThreshold(HL, mul);
+		AvgThreshold(HH, mul);
+
+		/*SmartThreshold(LH, mul);
+		SmartThreshold(HL, mul);
+		SmartThreshold(HH, mul);*/
+
+		ShowImage(L"LH Clear", LH, g_pParent);
+		ShowImage(L"HL Clear", HL, g_pParent);
+		ShowImage(L"HH Clear", HH, g_pParent);
+
+		// РћР±СЉРµРґРёРЅРёС‚Рµ РїРѕРґРґРёР°РїР°Р·РѕРЅС‹ РѕР±СЂР°С‚РЅРѕ
+		MergeSubbands(LL, LH, HL, HH, image);
+	}
+
+	// РЁР°Рі 4: РћР±СЂР°С‚РЅРѕРµ DWT
+	dwt.idwt2d(image, filter, decompositionLevel);
 }
 
 #include"CustomPicture2DDlg.h"
-void ShowImage(CString label, vector<vector<double>>& pic, CWnd* parent = nullptr)
+void ShowImage(CString label, vector<vector<double>>& pic, CWnd* parent)
 {
 	auto win = new CustomPicture2DDlg(label, 1000, 800, parent);
 	win->customPicture.SetGraphRange(0, pic[0].size(), 0, pic.size());
@@ -517,4 +664,214 @@ void ShowImage(CString label, vector<vector<double>>& pic, CWnd* parent = nullpt
 	win->MyShow();
 }
 
-	
+LoopInterpolation::LoopInterpolation(vector<double>& source)
+	:Interpolation(data)
+{
+}
+
+double LoopInterpolation::operator[](int index) const
+{
+	int size = data.size();
+	if (index < 0)return data[size + index];
+	if (index >= size)return data[index - size];
+	return data[index];
+}
+
+
+#ifdef max
+#undef max
+#endif
+
+// РќРѕСЂРјР°Р»РёР·Р°С†РёСЏ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ [0, 1]
+void Normalize(vector<vector<double>>& pic) {
+	double min = numeric_limits<double>::max();
+	double max = numeric_limits<double>::lowest();
+
+	for (const auto& row : pic) {
+		for (double val : row) {
+			if (val < min) min = val;
+			if (val > max) max = val;
+		}
+	}
+
+	double range = max - min;
+	if (range == 0) return;
+
+	for (auto& row : pic) {
+		for (double& val : row) {
+			val = (val - min) / range;
+		}
+	}
+}
+
+// Р’С‹С‡РёСЃР»РµРЅРёРµ РєРѕСЂСЂРµР»СЏС†РёРё РјРµР¶РґСѓ РґРІСѓРјСЏ РјР°С‚СЂРёС†Р°РјРё
+double Correlation(const vector<vector<double>>& a, const vector<vector<double>>& b) {
+	if (a.size() != b.size() || a[0].size() != b[0].size()) {
+		throw invalid_argument("РњР°С‚СЂРёС†С‹ РґРѕР»Р¶РЅС‹ Р±С‹С‚СЊ РѕРґРёРЅР°РєРѕРІРѕРіРѕ СЂР°Р·РјРµСЂР°");
+	}
+
+	int rows = a.size();
+	int cols = a[0].size();
+	int n = rows * cols;
+
+	double meanA = 0, meanB = 0;
+	for (int i = 0; i < rows; ++i) {
+		for (int j = 0; j < cols; ++j) {
+			meanA += a[i][j];
+			meanB += b[i][j];
+		}
+	}
+	meanA /= n;
+	meanB /= n;
+
+	double numerator = 0, denomA = 0, denomB = 0;
+	for (int i = 0; i < rows; ++i) {
+		for (int j = 0; j < cols; ++j) {
+			double aVal = a[i][j] - meanA;
+			double bVal = b[i][j] - meanB;
+			numerator += aVal * bVal;
+			denomA += aVal * aVal;
+			denomB += bVal * bVal;
+		}
+	}
+
+	return numerator / (sqrt(denomA) * sqrt(denomB));
+}
+
+// Р¤СѓРЅРєС†РёСЏ РїРѕРёСЃРєР° РѕР±СЉРµРєС‚Р° РЅР° РёР·РѕР±СЂР°Р¶РµРЅРёРё
+vector<pair<RECT, double>> FindObject(
+	vector<vector<double>>& image,
+	const vector<vector<double>>& pattern,
+	DWT& dwt,
+	const vector<double>& filter,
+	int decompositionLevel,
+	double threshold
+) {
+	// РќРѕСЂРјР°Р»РёР·Р°С†РёСЏ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ Рё С€Р°Р±Р»РѕРЅР°
+	Normalize(image);
+	vector<vector<double>> normalizedPattern = pattern;
+	Normalize(normalizedPattern);
+
+	// РџСЂРѕРІРµСЂРєР° СЂР°Р·РјРµСЂРѕРІ
+	int patternHeight = normalizedPattern.size();
+	int patternWidth = normalizedPattern[0].size();
+	int imageHeight = image.size();
+	int imageWidth = image[0].size();
+
+	if (patternHeight > imageHeight || patternWidth > imageWidth) {
+		throw invalid_argument("РЁР°Р±Р»РѕРЅ Р±РѕР»СЊС€Рµ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ");
+	}
+
+	// РџСЂРёРјРµРЅРµРЅРёРµ DWT Рє С€Р°Р±Р»РѕРЅСѓ
+	vector<vector<double>> patternDWT = normalizedPattern;
+	dwt.dwt2d(patternDWT, const_cast<vector<double>&>(filter), decompositionLevel);
+
+	// Р РµР·СѓР»СЊС‚Р°С‚С‹ РїРѕРёСЃРєР°
+	vector<pair<RECT, double>> matches;
+
+	// РЎРєРѕР»СЊР·СЏС‰РµРµ РѕРєРЅРѕ РїРѕ РёР·РѕР±СЂР°Р¶РµРЅРёСЋ
+	for (int y = 0; y <= imageHeight - patternHeight; ++y) {
+		for (int x = 0; x <= imageWidth - patternWidth; ++x) {
+			// Р’С‹СЂРµР·Р°РµРј СѓС‡Р°СЃС‚РѕРє РёР·РѕР±СЂР°Р¶РµРЅРёСЏ
+			vector<vector<double>> window(patternHeight, vector<double>(patternWidth));
+			for (int i = 0; i < patternHeight; ++i) {
+				for (int j = 0; j < patternWidth; ++j) {
+					window[i][j] = image[y + i][x + j];
+				}
+			}
+
+			// РќРѕСЂРјР°Р»РёР·Р°С†РёСЏ РѕРєРЅР°
+			Normalize(window);
+
+			// РџСЂРёРјРµРЅРµРЅРёРµ DWT Рє РѕРєРЅСѓ
+			vector<vector<double>> windowDWT = window;
+			dwt.dwt2d(windowDWT, const_cast<vector<double>&>(filter), decompositionLevel);
+
+			// РЎСЂР°РІРЅРµРЅРёРµ СЃ С€Р°Р±Р»РѕРЅРѕРј
+			try {
+				double score = Correlation(windowDWT, patternDWT);
+				if (score >= threshold) {
+					RECT rect = { x, y, x + patternWidth, y + patternHeight };
+					matches.push_back({ rect, score });
+				}
+			}
+			catch (const exception&) {
+				// РРіРЅРѕСЂРёСЂСѓРµРј РѕС€РёР±РєРё СЃСЂР°РІРЅРµРЅРёСЏ
+			}
+		}
+	}
+
+	return matches;
+}
+
+vector<pair<RECT, double>> FindObjectAdaptive(
+	vector<vector<double>>& image,
+	const vector<vector<double>>& pattern,
+	DWT& dwt,
+	const vector<double>& filter,
+	int decompositionLevel,
+	double threshold,
+	int fastStep,   // РЁР°Рі РїСЂРё РЅРёР·РєРѕР№ РєРѕСЂСЂРµР»СЏС†РёРё
+	int slowStep   // РЁР°Рі РїСЂРё РІС‹СЃРѕРєРѕР№ РєРѕСЂСЂРµР»СЏС†РёРё
+) {
+	// РќРѕСЂРјР°Р»РёР·Р°С†РёСЏ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ Рё С€Р°Р±Р»РѕРЅР°
+	Normalize(image);
+	vector<vector<double>> normalizedPattern = pattern;
+	Normalize(normalizedPattern);
+
+	// Р Р°Р·РјРµСЂС‹
+	int patternHeight = normalizedPattern.size();
+	int patternWidth = normalizedPattern[0].size();
+	int imageHeight = image.size();
+	int imageWidth = image[0].size();
+
+	if (patternHeight > imageHeight || patternWidth > imageWidth) {
+		throw invalid_argument("РЁР°Р±Р»РѕРЅ Р±РѕР»СЊС€Рµ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ");
+	}
+
+	// РџСЂРёРјРµРЅРµРЅРёРµ DWT Рє С€Р°Р±Р»РѕРЅСѓ
+	vector<vector<double>> patternDWT = normalizedPattern;
+	dwt.dwt2d(patternDWT, const_cast<vector<double>&>(filter), decompositionLevel);
+	vector < vector<double>>pHH, pLL, pHL, pLH;
+	splitSubbands(patternDWT, pLL, pLH, pHL, pHH);
+
+	// Р РµР·СѓР»СЊС‚Р°С‚С‹
+	vector<pair<RECT, double>> matches;
+
+	// РђРґР°РїС‚РёРІРЅС‹Р№ С€Р°Рі
+	for (int y = 0; y <= imageHeight - patternHeight; ) {
+		for (int x = 0; x <= imageWidth - patternWidth; ) {
+			// Р’С‹СЂРµР·Р°РµРј СѓС‡Р°СЃС‚РѕРє
+			vector<vector<double>> window(patternHeight, vector<double>(patternWidth));
+			for (int i = 0; i < patternHeight; ++i) {
+				for (int j = 0; j < patternWidth; ++j) {
+					window[i][j] = image[y + i][x + j];
+				}
+			}
+
+			// РќРѕСЂРјР°Р»РёР·Р°С†РёСЏ РѕРєРЅР°
+			Normalize(window);
+
+			// РџСЂРёРјРµРЅРµРЅРёРµ DWT
+			vector<vector<double>> windowDWT = window;
+			dwt.dwt2d(windowDWT, const_cast<vector<double>&>(filter), decompositionLevel);
+
+			vector<vector<double>>wHH, wLL, wHL, wLH;
+			splitSubbands(windowDWT, wLL, wLH, wHL, wHH);
+
+			// РЎСЂР°РІРЅРµРЅРёРµ
+			double score = Correlation(wLL, pLL);
+			if (score >= threshold) {
+				RECT rect = { x, y, x + patternWidth, y + patternHeight };
+				matches.push_back({ rect, score });
+			}
+
+			// РђРґР°РїС‚РёРІРЅС‹Р№ С€Р°Рі
+			int step = (score < threshold * 0.7) ? fastStep : slowStep;
+			x += step;
+		}
+		y += 1; // РћР±СЂР°Р±РѕС‚РєР° РїРѕ СЃС‚СЂРѕРєР°Рј
+	}
+
+	return matches;
+}

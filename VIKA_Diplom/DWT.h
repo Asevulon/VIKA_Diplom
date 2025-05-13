@@ -5,6 +5,10 @@
 #include <string>
 #include <gdiplus.h>
 using namespace std;
+
+static CWnd* g_pParent = nullptr;
+void ShowImage(CString label, vector<vector<double>>& pic, CWnd* parent = nullptr);
+
 namespace Filters
 {
 	static std::vector<  double>db4
@@ -39,6 +43,13 @@ protected:
 	int get_index(int index) const;
 public:
 	SymmetricInterpolation(vector<double>& source);
+	double operator[](int index) const override;
+};
+
+class LoopInterpolation : public Interpolation
+{
+public:
+	LoopInterpolation(vector<double>& source);
 	double operator[](int index) const override;
 };
 
@@ -84,6 +95,7 @@ void MergeSubbands(const std::vector<std::vector<double>>& LL,
 
 void Noise(vector<vector<double>>& target, double NoiseLevel);
 double Ediff(vector<vector<double>>& s1, vector<vector<double>>& s2);
+double POSSH(vector<vector<double>>& s1, vector<vector<double>>& s2);
 void ApplyThreshold(std::vector<std::vector<double>>& coeffs, double threshold);
 double EstimateSigma(const std::vector<std::vector<double>>& coeffs);
 void DenoiseImage(std::vector<std::vector<double>>& image,
@@ -92,3 +104,27 @@ void DenoiseImage(std::vector<std::vector<double>>& image,
 	double noiseSigma);
 
 void Normalize(vector<vector<double>>& pic);
+void Centralize(vector<vector<double>>& image);
+
+void DenoiseImageByAvg(std::vector<std::vector<double>>& image,
+	std::vector<double>& filter,
+	int decompositionLevel);
+vector<pair<RECT, double>> FindObject(
+	vector<vector<double>>& image,
+	const vector<vector<double>>& pattern,
+	DWT& dwt,
+	const vector<double>& filter,
+	int decompositionLevel = 1,
+	double threshold = 0.85
+);
+
+vector<pair<RECT, double>> FindObjectAdaptive(
+	vector<vector<double>>& image,
+	const vector<vector<double>>& pattern,
+	DWT& dwt,
+	const vector<double>& filter,
+	int decompositionLevel = 1,
+	double threshold = 0.85,
+	int fastStep = 4,   // Шаг при низкой корреляции
+	int slowStep = 1    // Шаг при высокой корреляции
+);

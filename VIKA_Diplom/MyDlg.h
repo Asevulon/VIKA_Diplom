@@ -37,6 +37,6 @@ public:
 	afx_msg void OnBnClickedOk();
 
 	void ShowImage(CString label, vector<vector<double>>& pic);
+	void ShowImage(CString label, vector<vector<double>>& pic, vector<pair<RECT, double>>& matches);
 };
 
-static CWnd* g_pParent = nullptr;
